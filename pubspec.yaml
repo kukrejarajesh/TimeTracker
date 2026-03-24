@@ -1,0 +1,29 @@
+name: time_tracker
+description: "Personal time tracking app — offline, SQLite-backed, Android only."
+publish_to: 'none'
+
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.11.3
+
+dependencies:
+  flutter:
+    sdk: flutter
+  sqflite: ^2.3.3          # SQLite database
+  path: ^1.9.0              # File path utilities (required by sqflite)
+  path_provider: ^2.1.4     # Access device directories (Downloads folder for CSV export)
+  provider: ^6.1.2          # State management
+  permission_handler: ^11.3.1  # Storage permission for CSV export
+  intl: ^0.20.2             # Date formatting
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+
+flutter:
+  uses-material-design: true
+
+  assets:
+    - assets/
