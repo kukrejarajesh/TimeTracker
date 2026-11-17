@@ -120,7 +120,7 @@ class TimeEntryRepository {
         AND te.end_time > ?
         ${excludeId == null ? '' : 'AND te.id != ?'}
       ORDER BY te.start_time ASC
-    ''', [date, endTime, startTime, if (excludeId != null) excludeId]);
+    ''', [date, endTime, startTime, ?excludeId]);
 
     return rows.map((r) => Map<String, dynamic>.from(r)).toList();
   }
