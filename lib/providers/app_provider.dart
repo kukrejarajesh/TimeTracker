@@ -29,6 +29,50 @@ class AppProvider extends ChangeNotifier {
     return result;
   }
 
+  /// Smallest untracked stretch worth surfacing, in minutes.
+  static const int minGapMinutes = 15;
+
+  /// Untracked stretches of the selected day as (startMin, endMin) minutes
+  /// since midnight. Past days cover 00:00–24:00, today only up to now,
+  /// future days have none. Overlapping entries are merged first so they
+  /// don't hide a real gap.
+  List<(int, int)> get gaps {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final int dayEnd;
+    if (_selectedDate.isAfter(today)) {
+      return [];
+    } else if (_selectedDate == today) {
+      dayEnd = now.hour * 60 + now.minute;
+    } else {
+      dayEnd = 24 * 60;
+    }
+
+    final ranges = _entries
+        .map((e) => (_toMin(e['start_time'] as String),
+            _toMin(e['end_time'] as String)))
+        .toList()
+      ..sort((a, b) => a.$1.compareTo(b.$1));
+
+    final result = <(int, int)>[];
+    var cursor = 0;
+    for (final (s, e) in ranges) {
+      if (s - cursor >= minGapMinutes && s <= dayEnd) {
+        result.add((cursor, s));
+      }
+      if (e > cursor) cursor = e;
+    }
+    if (dayEnd - cursor >= minGapMinutes) result.add((cursor, dayEnd));
+    return result;
+  }
+
+  int get untrackedMinutes => gaps.fold(0, (sum, g) => sum + (g.$2 - g.$1));
+
+  static int _toMin(String hhmm) {
+    final p = hhmm.split(':');
+    return int.parse(p[0]) * 60 + int.parse(p[1]);
+  }
+
   Future<void> loadEntries() async {
     isLoading = true;
     notifyListeners();

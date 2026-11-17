@@ -26,6 +26,18 @@ class AppStrings {
   static const String save           = 'Save';
   static const String cancel         = 'Cancel';
 
+  // Overlap / gaps
+  static const String overlapTitle       = 'Overlaps existing entries';
+  static const String saveAnyway         = 'Save anyway';
+  static const String untracked          = 'Untracked';
+  static const String untrackedGaps      = 'Untracked gaps (tap to fill)';
+
+  // Subcategory merge / duplicates
+  static const String mergeSubcategory   = 'Merge into…';
+  static const String mergeTitle         = 'Merge subcategory';
+  static const String duplicateTitle     = 'Similar subcategory exists';
+  static const String createAnyway       = 'Create anyway';
+
   // Categories screen
   static const String categories        = 'Categories';
   static const String addCategory       = 'Add Category';

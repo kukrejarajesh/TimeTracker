@@ -148,6 +148,49 @@ class SubcategoryRepository {
     return deletedRows > 0;
   }
 
+  /// Lower-cases and strips everything except letters/digits so that
+  /// "Evening wind-down" and "evening winddown" compare equal.
+  static String normalizeName(String name) =>
+      name.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '');
+
+  /// Active subcategories (in any category) whose normalized name matches
+  /// [name]. Used to warn about duplicates before creating a new one.
+  Future<List<Subcategory>> findSimilarByName(String name,
+      {int? excludeId}) async {
+    final key = normalizeName(name);
+    if (key.isEmpty) return [];
+    final all = await getActiveSubcategories();
+    return all
+        .where((s) => s.id != excludeId && normalizeName(s.name) == key)
+        .toList();
+  }
+
+  /// Move every time entry from [fromId] to [toId], then remove [fromId]
+  /// (it has no entries left, so the hard-delete rule is respected).
+  /// Returns the number of entries moved.
+  Future<int> mergeSubcategory({
+    required int fromId,
+    required int toId,
+  }) async {
+    if (fromId == toId) return 0;
+    final db = await _dbHelper.getDatabase();
+
+    return await db.transaction((txn) async {
+      final moved = await txn.update(
+        DBHelper.tableTimeEntries,
+        {DBHelper.colTimeEntrySubcategoryId: toId},
+        where: '${DBHelper.colTimeEntrySubcategoryId} = ?',
+        whereArgs: [fromId],
+      );
+      await txn.delete(
+        DBHelper.tableSubcategories,
+        where: '${DBHelper.colSubcategoryId} = ?',
+        whereArgs: [fromId],
+      );
+      return moved;
+    });
+  }
+
   /// Check if subcategory can be hard-deleted (has no time entries)
   Future<bool> canDeleteSubcategory(int id) async {
     final db = await _dbHelper.getDatabase();

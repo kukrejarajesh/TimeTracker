@@ -148,6 +148,61 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
     _load();
   }
 
+  Future<void> _mergeSubcategory(Subcategory source) async {
+    // Candidate targets: every other active subcategory, labelled with its category.
+    final catName = {for (final d in _data) d.category.id: d.category.name};
+    final targets = [
+      for (final d in _data)
+        for (final s in d.subcategories)
+          if (s.id != source.id) s,
+    ];
+    if (targets.isEmpty) {
+      _showSnack('No other subcategory to merge into.');
+      return;
+    }
+
+    final target = await showDialog<Subcategory>(
+      context: context,
+      builder: (ctx) => SimpleDialog(
+        title: Text('Merge "${source.name}" into…'),
+        children: [
+          SizedBox(
+            width: double.maxFinite,
+            height: 360,
+            child: ListView(
+              children: [
+                for (final t in targets)
+                  ListTile(
+                    dense: true,
+                    title: Text(t.name),
+                    subtitle: Text(catName[t.categoryId] ?? ''),
+                    onTap: () => Navigator.pop(ctx, t),
+                  ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+    if (target == null || !mounted) return;
+
+    final confirmed = await _confirmDialog(
+      title: AppStrings.mergeTitle,
+      message: 'Move all entries from "${source.name}" to "${target.name}" '
+          'and remove "${source.name}"?\n\nThis cannot be undone.',
+      destructive: true,
+      confirmLabel: 'Merge',
+    );
+    if (confirmed != true || !mounted) return;
+
+    final moved = await _subcategoryRepo.mergeSubcategory(
+        fromId: source.id, toId: target.id);
+    if (!mounted) return;
+    _showSnack('Moved $moved ${moved == 1 ? 'entry' : 'entries'} '
+        'to "${target.name}".');
+    _load();
+  }
+
   void _showSubcategoryDialog(Category cat, Subcategory? existing) {
     showModalBottomSheet(
       context: context,
@@ -160,6 +215,21 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
         categoryColor: cat.color,
         existing: existing,
         onSave: (name) async {
+          final similar = await _subcategoryRepo.findSimilarByName(name,
+              excludeId: existing?.id);
+          if (similar.isNotEmpty && mounted) {
+            final names = similar.map((s) => '"${s.name}"').join(', ');
+            final proceed = await _confirmDialog(
+              title: AppStrings.duplicateTitle,
+              message: '$names already exists. Use it instead of creating '
+                  'a duplicate?',
+              destructive: false,
+              confirmLabel: existing == null
+                  ? AppStrings.createAnyway
+                  : AppStrings.save,
+            );
+            if (proceed != true) return;
+          }
           if (existing == null) {
             await _subcategoryRepo.createSubcategory(
                 categoryId: cat.id, name: name);
@@ -246,6 +316,7 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
                     onEditSubcategory: (sub) =>
                         _editSubcategory(_data[i].category, sub),
                     onDeleteSubcategory: _deleteOrArchiveSubcategory,
+                    onMergeSubcategory: _mergeSubcategory,
                   ),
                 ),
     );
@@ -263,6 +334,7 @@ class _CategoryTile extends StatelessWidget {
   final VoidCallback onAddSubcategory;
   final void Function(Subcategory) onEditSubcategory;
   final void Function(Subcategory) onDeleteSubcategory;
+  final void Function(Subcategory) onMergeSubcategory;
 
   const _CategoryTile({
     required this.data,
@@ -271,6 +343,7 @@ class _CategoryTile extends StatelessWidget {
     required this.onAddSubcategory,
     required this.onEditSubcategory,
     required this.onDeleteSubcategory,
+    required this.onMergeSubcategory,
   });
 
   @override
@@ -342,6 +415,11 @@ class _CategoryTile extends StatelessWidget {
                 trailing: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
+                    IconButton(
+                      icon: const Icon(Icons.merge_type, size: 18),
+                      tooltip: AppStrings.mergeSubcategory,
+                      onPressed: () => onMergeSubcategory(sub),
+                    ),
                     IconButton(
                       icon: const Icon(Icons.edit_outlined, size: 18),
                       tooltip: 'Edit subcategory',
@@ -568,6 +646,8 @@ class _SubcategoryDialogState extends State<_SubcategoryDialog> {
     }
     setState(() { _saving = true; _error = null; });
     await widget.onSave(name);
+    // onSave may return without closing the sheet (e.g. duplicate declined).
+    if (mounted) setState(() => _saving = false);
   }
 
   @override

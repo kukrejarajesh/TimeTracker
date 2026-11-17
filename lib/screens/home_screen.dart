@@ -59,11 +59,20 @@ class _HomeScreenState extends State<HomeScreen> {
     return '$weekday, ${d.day} ${months[d.month]} ${d.year}';
   }
 
-  Future<void> _openEntryForm(BuildContext context) async {
+  static String _hhmm(int minutes) =>
+      '${(minutes ~/ 60).toString().padLeft(2, '0')}:'
+      '${(minutes % 60).toString().padLeft(2, '0')}';
+
+  Future<void> _openEntryForm(BuildContext context,
+      {String? start, String? end}) async {
     final provider = context.read<AppProvider>();
     await Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (_) => EntryFormScreen(initialDate: provider.selectedDate),
+        builder: (_) => EntryFormScreen(
+          initialDate: provider.selectedDate,
+          initialStart: start,
+          initialEnd: end,
+        ),
       ),
     );
     if (mounted) provider.loadEntries();
@@ -88,6 +97,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   label: AppStrings.totalHours,
                   formatted: _formatDuration(provider.totalMinutes),
                   entryCount: provider.entries.length,
+                  untrackedMinutes: provider.untrackedMinutes,
                 ),
                 Expanded(
                   child: grouped.isEmpty
@@ -95,6 +105,13 @@ class _HomeScreenState extends State<HomeScreen> {
                       : ListView(
                           padding: const EdgeInsets.fromLTRB(12, 8, 12, 80),
                           children: [
+                            if (provider.gaps.isNotEmpty)
+                              _GapsSection(
+                                gaps: provider.gaps,
+                                hhmm: _hhmm,
+                                onTap: (g) => _openEntryForm(context,
+                                    start: _hhmm(g.$1), end: _hhmm(g.$2)),
+                              ),
                             for (final group in grouped.entries)
                               _SubcategoryGroup(
                                 subcategory: group.key,
@@ -160,11 +177,13 @@ class _TotalHoursBar extends StatelessWidget {
   final String label;
   final String formatted;
   final int entryCount;
+  final int untrackedMinutes;
 
   const _TotalHoursBar({
     required this.label,
     required this.formatted,
     required this.entryCount,
+    required this.untrackedMinutes,
   });
 
   @override
@@ -188,12 +207,68 @@ class _TotalHoursBar extends StatelessWidget {
             ),
           ),
           const Spacer(),
+          if (untrackedMinutes > 0) ...[
+            Text(
+              '${AppStrings.untracked}: ${_formatDuration(untrackedMinutes)}',
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: colorScheme.error,
+              ),
+            ),
+            const SizedBox(width: 12),
+          ],
           Text(
             '$entryCount ${entryCount == 1 ? 'entry' : 'entries'}',
             style: TextStyle(
               fontSize: 13,
               color: colorScheme.onPrimaryContainer.withAlpha(180),
             ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _GapsSection extends StatelessWidget {
+  final List<(int, int)> gaps;
+  final String Function(int) hhmm;
+  final void Function((int, int)) onTap;
+
+  const _GapsSection({
+    required this.gaps,
+    required this.hhmm,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            AppStrings.untrackedGaps,
+            style: TextStyle(
+              fontSize: 12,
+              color: colorScheme.onSurfaceVariant,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Wrap(
+            spacing: 6,
+            runSpacing: 4,
+            children: [
+              for (final g in gaps)
+                ActionChip(
+                  label: Text(
+                      '${hhmm(g.$1)}–${hhmm(g.$2)} · ${_formatDuration(g.$2 - g.$1)}'),
+                  onPressed: () => onTap(g),
+                ),
+            ],
           ),
         ],
       ),

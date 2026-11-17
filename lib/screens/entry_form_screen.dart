@@ -17,7 +17,16 @@ import '../models/subcategory.dart';
 class EntryFormScreen extends StatefulWidget {
   final DateTime initialDate;
 
-  const EntryFormScreen({super.key, required this.initialDate});
+  /// Optional pre-filled times (HH:mm), e.g. when filling an untracked gap.
+  final String? initialStart;
+  final String? initialEnd;
+
+  const EntryFormScreen({
+    super.key,
+    required this.initialDate,
+    this.initialStart,
+    this.initialEnd,
+  });
 
   @override
   State<EntryFormScreen> createState() => _EntryFormScreenState();
@@ -45,7 +54,21 @@ class _EntryFormScreenState extends State<EntryFormScreen> {
   void initState() {
     super.initState();
     _selectedDate = widget.initialDate;
+    _startTime = _parseTime(widget.initialStart);
+    _endTime = _parseTime(widget.initialEnd);
     _loadData();
+  }
+
+  static TimeOfDay? _parseTime(String? s) {
+    if (s == null) return null;
+    final parts = s.split(':');
+    if (parts.length != 2) return null;
+    final h = int.tryParse(parts[0]);
+    final m = int.tryParse(parts[1]);
+    if (h == null || m == null) return null;
+    // 24:00 (end of day) isn't representable as TimeOfDay; clamp to 23:59.
+    if (h >= 24) return const TimeOfDay(hour: 23, minute: 59);
+    return TimeOfDay(hour: h, minute: m);
   }
 
   @override
@@ -181,6 +204,17 @@ class _EntryFormScreenState extends State<EntryFormScreen> {
       return;
     }
 
+    final overlaps = await _timeEntryRepo.findOverlappingEntries(
+      date: _dateKey(_selectedDate),
+      startTime: _timeStr(_startTime!),
+      endTime: _timeStr(_endTime!),
+    );
+    if (overlaps.isNotEmpty) {
+      if (!mounted) return;
+      final proceed = await _confirmOverlap(overlaps);
+      if (proceed != true || !mounted) return;
+    }
+
     setState(() {
       _isSaving = true;
       _error = null;
@@ -198,6 +232,31 @@ class _EntryFormScreenState extends State<EntryFormScreen> {
     );
 
     if (mounted) Navigator.pop(context);
+  }
+
+  Future<bool?> _confirmOverlap(List<Map<String, dynamic>> overlaps) {
+    final lines = overlaps
+        .map((o) =>
+            '• ${o['subcategory_name']}  ${o['start_time']}–${o['end_time']}')
+        .join('\n');
+    return showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text(AppStrings.overlapTitle),
+        content: Text(
+            'This entry overlaps:\n\n$lines\n\nOverlaps inflate your totals.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text(AppStrings.cancel),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text(AppStrings.saveAnyway),
+          ),
+        ],
+      ),
+    );
   }
 
   // ── build ──────────────────────────────────────────────────────────────────

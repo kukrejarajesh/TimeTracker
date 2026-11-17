@@ -96,6 +96,35 @@ class TimeEntryRepository {
     return result.map((row) => TimeEntry.fromMap(row)).toList();
   }
 
+  /// Entries on [date] whose time range overlaps [startTime]–[endTime]
+  /// (HH:mm strings, which compare correctly as text). Entries that merely
+  /// touch (one ends exactly when the other starts) do not count.
+  /// Pass [excludeId] when editing so an entry doesn't clash with itself.
+  Future<List<Map<String, dynamic>>> findOverlappingEntries({
+    required String date,
+    required String startTime,
+    required String endTime,
+    int? excludeId,
+  }) async {
+    final db = await _dbHelper.getDatabase();
+
+    final rows = await db.rawQuery('''
+      SELECT te.id,
+             s.name AS subcategory_name,
+             te.start_time,
+             te.end_time
+      FROM ${DBHelper.tableTimeEntries} te
+      JOIN ${DBHelper.tableSubcategories} s ON te.subcategory_id = s.id
+      WHERE te.date = ?
+        AND te.start_time < ?
+        AND te.end_time > ?
+        ${excludeId == null ? '' : 'AND te.id != ?'}
+      ORDER BY te.start_time ASC
+    ''', [date, endTime, startTime, if (excludeId != null) excludeId]);
+
+    return rows.map((r) => Map<String, dynamic>.from(r)).toList();
+  }
+
   /// Get all entries joined with subcategory and category details, ordered by
   /// date and start_time ascending. Used for CSV export.
   Future<List<Map<String, dynamic>>> getAllEntriesWithDetails() async {
